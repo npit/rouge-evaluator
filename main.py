@@ -3,7 +3,6 @@ import json
 import pickle
 
 import numpy as np
-import pandas as pd
 import rouge
 
 
@@ -76,7 +75,7 @@ def get_rouge_scores(doc_sents, goldens, maxlength, maxtype):
                 #     prepare_results(metric, results['p'], results['r'],
                 #                     results['f']))
         #print()
-        return res
+    return res
 
 
 
