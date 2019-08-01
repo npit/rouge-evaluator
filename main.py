@@ -13,8 +13,8 @@ Rouge evaluation script
 
 def prepare_results(metric, p, r, f):
     # return '\t{}:\t{}: {:5.2f}\t{}: {:5.2f}\t{}: {:5.2f}'.format(
-     #   metric, 'P', 100.0 * p, 'R', 100.0 * r, 'F1', 100.0 * f)
-     return 100.0 * p, 100.0 * r, 100.0 * f
+    #   metric, 'P', 100.0 * p, 'R', 100.0 * r, 'F1', 100.0 * f)
+    return 100.0 * p, 100.0 * r, 100.0 * f
 
 
 def get_rouge_scores(doc_sents, goldens, maxlength, maxtype):
@@ -22,7 +22,7 @@ def get_rouge_scores(doc_sents, goldens, maxlength, maxtype):
     for aggregator in ['Avg', 'Best', 'Individual']:
 
         res[aggregator] = {}
-        print('Evaluation with {}'.format(aggregator))
+        # print('Evaluation with {}'.format(aggregator))
         apply_avg = aggregator == 'Avg'
         apply_best = aggregator == 'Best'
 
@@ -56,11 +56,14 @@ def get_rouge_scores(doc_sents, goldens, maxlength, maxtype):
                     nb_references = len(results_per_ref['p'])
                     for reference_id in range(nb_references):
                         # print('\tHypothesis #{} & Reference #{}: '.format(
-                            #hypothesis_id, reference_id))
+                        #hypothesis_id, reference_id))
 
-                        res[aggregator][metric]["precision"].append(results_per_ref['p'])
-                        res[aggregator][metric]["recall"].append(results_per_ref['r'])
-                        res[aggregator][metric]["f1"].append(results_per_ref['f'])
+                        res[aggregator][metric]["precision"].append(
+                            results_per_ref['p'])
+                        res[aggregator][metric]["recall"].append(
+                            results_per_ref['r'])
+                        res[aggregator][metric]["f1"].append(
+                            results_per_ref['f'])
 
                         #print('\t' + prepare_results(
                         #    metric, results_per_ref['p'][reference_id],
@@ -78,7 +81,6 @@ def get_rouge_scores(doc_sents, goldens, maxlength, maxtype):
     return res
 
 
-
 if __name__ == "__main__":
     """
     Arguments:
@@ -92,28 +94,46 @@ if __name__ == "__main__":
     """
     parser = argparse.ArgumentParser(description='')
     # classification results file, to pick which sentences where classified as summary parts
-    parser.add_argument('results_file', help="File containing predictions for an extractive summarization binary classification task.")
+    parser.add_argument(
+        'results_file',
+        help=
+        "File containing predictions for an extractive summarization binary classification task."
+    )
     # the dataset path corresponding to the results
-    parser.add_argument('dataset_file', help="Path to the dataset json file of the test data.",)
+    parser.add_argument(
+        'dataset_file',
+        help="Path to the dataset json file of the test data.",
+    )
     # the golden summaries path
-    parser.add_argument('golden_summaries_file', help="Path to the golden summaries fo the test data.")
+    parser.add_argument('golden_summaries_file',
+                        help="Path to the golden summaries fo the test data.")
     args = parser.parse_args()
+    main(args.results_file, args.dataset_file, args.golden_summaries_file)
 
-    with open(args.dataset_file) as f:
+
+def main(results_file, dataset_file, golden_summaries_file):
+
+    with open(dataset_file) as f:
         dataset = json.load(f)
-    with open(args.results_file, "rb") as f:
-        results = pickle.load(f)
-        if type(results) == list:
-            results = results[0]
-        else:
-            results = np.squeeze(results)
+    # read pickle
+    if any(results_file.endswith(x) for x in [".pkl", ".pickle"]):
+        with open(results_file, "rb") as f:
+            results = pickle.load(f)
+    else:
+        # as-is
+        results = results_file
+
+    if type(results) == list:
+        results = results[0]
+    else:
+        results = np.squeeze(results)
 
     if len(results.shape) > 1:
         # get selected sentence indexes
         predictions = np.argmax(results, axis=1)
     else:
         predictions = results
-    if set(predictions) != set([0,1]):
+    if set(predictions) != set([0, 1]):
         # convert probability scores to label indexes
         predictions = np.round(predictions)
     selected_sents = np.where(predictions == 1)[0]
@@ -134,7 +154,7 @@ if __name__ == "__main__":
         sents = [s if s.endswith(".") else s + "." for s in doc_sents[doc_idx]]
         doc_sents[doc_idx] = " ".join(doc_sents[doc_idx])
 
-    with open(args.golden_summaries_file) as f:
+    with open(golden_summaries_file) as f:
         goldens = json.load(f)
 
     doc_goldens = {}
@@ -161,9 +181,10 @@ if __name__ == "__main__":
     doc_goldens = [doc_goldens[k] for k in doc_keys]
     print("Evaluating {} input and {} golden summaries".format(
         len(doc_sents), len(doc_goldens)))
-    print(doc_sents)
-    print(doc_goldens)
+    # print(doc_sents)
+    # print(doc_goldens)
     maxlength, maxtype = 100, "words"
     scores = get_rouge_scores(doc_sents, doc_goldens, maxlength, maxtype)
     with open("results.pickle", "wb") as f:
         pickle.dump(scores, f)
+    return scores
