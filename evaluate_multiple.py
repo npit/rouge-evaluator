@@ -1,6 +1,6 @@
 import os
 from glob import glob
-from os.path import isdir, join
+from os.path import basename, isdir, join
 
 import numpy as np
 import pandas as pd
@@ -45,4 +45,4 @@ for run_id in os.listdir(large_results_dir):
 
 df = pd.DataFrame.from_dict(all_scores, orient='index')
 print(df.round(print_precision).to_string())
-df.to_csv("rouge_runs.csv")
+df.to_csv("{}_rouge_scores.csv".format(basename(large_results_dir)))
