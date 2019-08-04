@@ -19,6 +19,7 @@ goldens = "/home/nik/datasets/multiling15/multiling_english_lblratio2mod_oversam
 verify_folds = 5
 # execute these types of rouge evaluation
 rouge_mode, rouge_ngram, rouge_metric = "Avg", (["rouge-1", "rouge-2"]), "f1"
+print_precision = 3
 
 all_scores = {}
 for run_id in os.listdir(large_results_dir):
@@ -43,5 +44,5 @@ for run_id in os.listdir(large_results_dir):
     all_scores[run_id] = {ng: np.mean(run_scores[ng]) for ng in rouge_ngram}
 
 df = pd.DataFrame.from_dict(all_scores, orient='index')
-print(df.to_string())
+print(df.round(print_precision).to_string())
 df.to_csv("rouge_runs.csv")
