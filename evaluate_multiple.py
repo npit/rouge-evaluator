@@ -41,7 +41,7 @@ for run_id in os.listdir(large_results_dir):
 
     print(run_scores)
     # average folds
-    all_scores[run_id] = {ng: np.mean(run_scores[ng]) for ng in rouge_ngram}
+    all_scores[run_id] = {ng: np.mean(run_scores[ng], axis=0) for ng in rouge_ngram}
 
 df = pd.DataFrame.from_dict(all_scores, orient='index')
 print(df.round(print_precision).to_string())

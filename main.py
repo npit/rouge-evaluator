@@ -84,6 +84,30 @@ def get_rouge_scores(doc_sents, goldens, maxlength, maxtype):
     return res
 
 
+def print_results(scores, categories):
+    print_scores = {}
+    for aggr in scores:
+        if aggr not in categories:
+            continue
+        if aggr not in print_scores:
+            print_scores[aggr] = {}
+        for rmetr in scores[aggr]:
+            if rmetr not in ["rouge-1", "rouge-2"]:
+                continue
+            if rmetr not in print_scores[aggr]:
+                print_scores[aggr][rmetr] = {}
+
+            for evmetr in scores[aggr][rmetr]:
+                if evmetr not in ["f1"]:
+                    continue
+                print_scores[aggr][rmetr][evmetr] = \
+                    scores[aggr][rmetr][evmetr]
+
+    print("Categories:", categories)
+    df = pd.DataFrame.from_dict(scores["Avg"], orient='index')
+    print(df.round(3).to_string())
+
+
 def main(results_file, dataset_file, golden_summaries_file):
 
     with open(dataset_file) as f:
@@ -102,7 +126,8 @@ def main(results_file, dataset_file, golden_summaries_file):
                 p + 1, len(globs), predfile))
             with open(predfile, "rb") as f:
                 preds_list.append(pickle.load(f))
-        results = np.mean(preds_list)
+        import ipdb;ipdb.set_trace()
+        results = np.mean(preds_list, axis=0)
     else:
         # as-is
         print("Assumming input results as-is")
@@ -174,28 +199,8 @@ def main(results_file, dataset_file, golden_summaries_file):
         pickle.dump(scores, f)
 
     if args.do_print:
-        import ipdb
-        ipdb.set_trace()
-        print_scores = {}
-        for aggr in scores:
-            if aggr not in ["Avg"]:
-                continue
-            if aggr not in print_scores:
-                print_scores[aggr] = {}
-            for rmetr in scores[aggr]:
-                if rmetr not in ["rouge-1", "rouge-2"]:
-                    continue
-                if rmetr not in print_scores[aggr]:
-                    print_scores[aggr][rmetr] = {}
-
-                for evmetr in scores[aggr][rmetr]:
-                    if evmetr not in ["f1"]:
-                        continue
-                    print_scores[aggr][rmetr][evmetr] = \
-                        scores[aggr][rmetr][evmetr]
-
-        df = pd.DataFrame.from_dict(scores["Avg"], orient='index')
-        print(df.round(3).to_string())
+        print_results(scores, ["Avg"])
+        print_results(scores, ["Best"])
 
     return scores
 
