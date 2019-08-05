@@ -1,8 +1,11 @@
 import argparse
+import glob
 import json
 import pickle
+from os.path import isdir, join
 
 import numpy as np
+import pandas as pd
 import rouge
 
 
@@ -81,36 +84,6 @@ def get_rouge_scores(doc_sents, goldens, maxlength, maxtype):
     return res
 
 
-if __name__ == "__main__":
-    """
-    Arguments:
-    results_file: path to <num samples x DIM > ndarray of float predictions, in one-hot format (DIM=2), or a prediction vector (DIM=1)
-                  containing label indexes or probability scores. In the latter case, a decision threshold of 0.5 is adopted.
-                  If it's a list, the first element is retrieved (for compatibility reasons with other tools). 
-    dataset_file: path to the json dataset serialization. The structure below should be present:
-                  {"data": {"test":[{"text":"bla..", "document_index": 0}, .... ]}}
-    golden_summaries_file: path to the golden summaries json dataset serialization. The structure below should be present:
-                  {"golden": [{"summary": ["summary sent1", ...], "document_index": 0}, ...]}
-    """
-    parser = argparse.ArgumentParser(description='')
-    # classification results file, to pick which sentences where classified as summary parts
-    parser.add_argument(
-        'results_file',
-        help=
-        "File containing predictions for an extractive summarization binary classification task."
-    )
-    # the dataset path corresponding to the results
-    parser.add_argument(
-        'dataset_file',
-        help="Path to the dataset json file of the test data.",
-    )
-    # the golden summaries path
-    parser.add_argument('golden_summaries_file',
-                        help="Path to the golden summaries fo the test data.")
-    args = parser.parse_args()
-    main(args.results_file, args.dataset_file, args.golden_summaries_file)
-
-
 def main(results_file, dataset_file, golden_summaries_file):
 
     with open(dataset_file) as f:
@@ -119,8 +92,20 @@ def main(results_file, dataset_file, golden_summaries_file):
     if any(results_file.endswith(x) for x in [".pkl", ".pickle"]):
         with open(results_file, "rb") as f:
             results = pickle.load(f)
+    elif isdir(results_file):
+        # assumed to contain at least one predictions file
+        print("Assumming input as a directory with results")
+        preds_list = []
+        globs = glob.glob(join(results_file + "/*.predictions.pickle"))
+        for p, predfile in enumerate(globs):
+            print("Partial prediction file: {}/{} :  {}".format(
+                p + 1, len(globs), predfile))
+            with open(predfile, "rb") as f:
+                preds_list.append(pickle.load(f))
+        results = np.mean(preds_list)
     else:
         # as-is
+        print("Assumming input results as-is")
         results = results_file
 
     if type(results) == list:
@@ -187,4 +172,64 @@ def main(results_file, dataset_file, golden_summaries_file):
     scores = get_rouge_scores(doc_sents, doc_goldens, maxlength, maxtype)
     with open("results.pickle", "wb") as f:
         pickle.dump(scores, f)
+
+    if args.do_print:
+        import ipdb
+        ipdb.set_trace()
+        print_scores = {}
+        for aggr in scores:
+            if aggr not in ["Avg"]:
+                continue
+            if aggr not in print_scores:
+                print_scores[aggr] = {}
+            for rmetr in scores[aggr]:
+                if rmetr not in ["rouge-1", "rouge-2"]:
+                    continue
+                if rmetr not in print_scores[aggr]:
+                    print_scores[aggr][rmetr] = {}
+
+                for evmetr in scores[aggr][rmetr]:
+                    if evmetr not in ["f1"]:
+                        continue
+                    print_scores[aggr][rmetr][evmetr] = \
+                        scores[aggr][rmetr][evmetr]
+
+        df = pd.DataFrame.from_dict(scores["Avg"], orient='index')
+        print(df.round(3).to_string())
+
     return scores
+
+
+if __name__ == "__main__":
+    """
+    Arguments:
+    results_file: path to <num samples x DIM > ndarray of float predictions, in one-hot format (DIM=2), or a prediction vector (DIM=1)
+                  containing label indexes or probability scores. In the latter case, a decision threshold of 0.5 is adopted.
+                  If it's a list, the first element is retrieved (for compatibility reasons with other tools). 
+    dataset_file: path to the json dataset serialization. The structure below should be present:
+                  {"data": {"test":[{"text":"bla..", "document_index": 0}, .... ]}}
+    golden_summaries_file: path to the golden summaries json dataset serialization. The structure below should be present:
+                  {"golden": [{"summary": ["summary sent1", ...], "document_index": 0}, ...]}
+    """
+    parser = argparse.ArgumentParser(description='')
+    # classification results file, to pick which sentences where classified as summary parts
+    parser.add_argument(
+        'results_file',
+        help=
+        "File containing predictions for an extractive summarization binary classification task."
+    )
+    # the dataset path corresponding to the results
+    parser.add_argument(
+        'dataset_file',
+        help="Path to the dataset json file of the test data.",
+    )
+    # the golden summaries path
+    parser.add_argument('golden_summaries_file',
+                        help="Path to the golden summaries fo the test data.")
+    parser.add_argument('--print',
+                        action="store_true",
+                        help="Print results or not (default true)",
+                        dest="do_print",
+                        default=True)
+    args = parser.parse_args()
+    main(args.results_file, args.dataset_file, args.golden_summaries_file)
