@@ -108,7 +108,7 @@ def print_results(scores, categories):
     print(df.round(3).to_string())
 
 
-def main(results_file, dataset_file, golden_summaries_file):
+def main(results_file, dataset_file, golden_summaries_file, do_print=True):
 
     with open(dataset_file) as f:
         dataset = json.load(f)
@@ -125,8 +125,11 @@ def main(results_file, dataset_file, golden_summaries_file):
             print("Partial prediction file: {}/{} :  {}".format(
                 p + 1, len(globs), predfile))
             with open(predfile, "rb") as f:
-                preds_list.append(pickle.load(f))
-        import ipdb;ipdb.set_trace()
+                preds = pickle.load(f)
+                if type(preds) is list:
+                    preds = preds[0]
+                preds_list.append(preds)
+        # import pdb; pdb.set_trace()
         results = np.mean(preds_list, axis=0)
     else:
         # as-is
@@ -198,7 +201,7 @@ def main(results_file, dataset_file, golden_summaries_file):
     with open("results.pickle", "wb") as f:
         pickle.dump(scores, f)
 
-    if args.do_print:
+    if do_print:
         print_results(scores, ["Avg"])
         print_results(scores, ["Best"])
 
@@ -237,4 +240,4 @@ if __name__ == "__main__":
                         dest="do_print",
                         default=True)
     args = parser.parse_args()
-    main(args.results_file, args.dataset_file, args.golden_summaries_file)
+    main(args.results_file, args.dataset_file, args.golden_summaries_file, args.do_print)
