@@ -21,6 +21,9 @@ def prepare_results(metric, p, r, f):
 
 
 def get_rouge_scores(doc_sents, goldens, maxlength, maxtype):
+    print(
+        "Evaluating ROUGE on {} sentences, {} golden summaries, with  {} maxlen and {} type."
+        .format(len(doc_sents), len(goldens), maxlength, maxtype))
     res = {}
     for aggregator in ['Avg', 'Best', 'Individual']:
 
@@ -84,73 +87,54 @@ def get_rouge_scores(doc_sents, goldens, maxlength, maxtype):
     return res
 
 
-def print_results(scores, categories):
+def print_results(scores, rouge_mode, ngram_mode, metric):
     print_scores = {}
     for aggr in scores:
-        if aggr not in categories:
+        if aggr not in rouge_mode:
             continue
         if aggr not in print_scores:
             print_scores[aggr] = {}
+
         for rmetr in scores[aggr]:
-            if rmetr not in ["rouge-1", "rouge-2"]:
+            if rmetr not in ngram_mode:
                 continue
             if rmetr not in print_scores[aggr]:
                 print_scores[aggr][rmetr] = {}
 
             for evmetr in scores[aggr][rmetr]:
-                if evmetr not in ["f1"]:
+                if evmetr not in metric:
                     continue
                 print_scores[aggr][rmetr][evmetr] = \
                     scores[aggr][rmetr][evmetr]
 
-    print("Categories:", categories)
+    print("Categories:", rouge_mode)
     df = pd.DataFrame.from_dict(scores["Avg"], orient='index')
     print(df.round(3).to_string())
 
 
-def main(results_file, dataset_file, golden_summaries_file, do_print=True):
+def main(**kwargs):
+    predictions = kwargs["predictions"]
+    dataset_path = kwargs["dataset_path"]
+    golden_summaries_path = kwargs["golden_summaries_path"]
+    do_print = kwargs["do_print"]
+    rouge_mode = kwargs["rouge_mode"]
+    ngram_mode = kwargs["ngram_mode"]
+    metric = kwargs["metric"]
 
-    with open(dataset_file) as f:
-        dataset = json.load(f)
-    # read pickle
-    if any(results_file.endswith(x) for x in [".pkl", ".pickle"]):
-        with open(results_file, "rb") as f:
-            results = pickle.load(f)
-    elif isdir(results_file):
-        # assumed to contain at least one predictions file
-        print("Assumming input as a directory with results")
-        preds_list = []
-        globs = glob.glob(join(results_file + "/*.predictions.pickle"))
-        for p, predfile in enumerate(globs):
-            print("Partial prediction file: {}/{} :  {}".format(
-                p + 1, len(globs), predfile))
-            with open(predfile, "rb") as f:
-                preds = pickle.load(f)
-                if type(preds) is list:
-                    preds = preds[0]
-                preds_list.append(preds)
-        # import pdb; pdb.set_trace()
-        results = np.mean(preds_list, axis=0)
-    else:
-        # as-is
-        print("Assumming input results as-is")
-        results = results_file
 
-    if type(results) == list:
-        results = results[0]
-    else:
-        results = np.squeeze(results)
+    ngram_mode = [ngram_mode] if type(ngram_mode) is not list else ngram_mode
+    metric = [metric] if type(metric) is not list else metric
 
-    if len(results.shape) > 1:
-        # get selected sentence indexes
-        predictions = np.argmax(results, axis=1)
-    else:
-        predictions = results
-    if set(predictions) != set([0, 1]):
-        # convert probability scores to label indexes
-        predictions = np.round(predictions)
+    if len(predictions.shape) > 1:
+        # get selected sentence indexes, if preditions are probabilities or scores
+        predictions = np.argmax(predictions, axis=1)
+    # if set(predictions) != set([0, 1]):
+    #     # convert probability scores to label indexes
+    #     predictions = np.round(predictions)
     selected_sents = np.where(predictions == 1)[0]
     # get sentences themselves
+    with open(dataset_path) as f:
+        dataset = json.load(f)
     selected_sents = [dataset['data']['test'][idx] for idx in selected_sents]
     # group by document index
     doc_sents = {}
@@ -161,16 +145,17 @@ def main(results_file, dataset_file, golden_summaries_file, do_print=True):
             doc_sents[doc_index] = []
         doc_sents[doc_index].append(sent)
 
-    # merge sentences
+    # merge selected sentences
     for doc_idx in doc_sents:
         sents = [s.strip() for s in doc_sents[doc_idx]]
-        sents = [s if s.endswith(".") else s + "." for s in doc_sents[doc_idx]]
-        doc_sents[doc_idx] = " ".join(doc_sents[doc_idx])
+        sents = [s if s.endswith(".") else s + "." for s in sents]
+        doc_sents[doc_idx] = " ".join(sents)
 
-    with open(golden_summaries_file) as f:
+    with open(golden_summaries_path) as f:
         goldens = json.load(f)
 
     doc_goldens = {}
+    num_no_assign = 0
     for gold in goldens['golden']:
         summs = gold['summaries']
         doc_index = gold['document_index']
@@ -180,30 +165,25 @@ def main(results_file, dataset_file, golden_summaries_file, do_print=True):
             exit(1)
         doc_goldens[doc_index] = " ".join(summs)
         if doc_index not in doc_sents:
-            print(
-                "[!] Document index {} has no assigned summary! -- setting empty string"
-                .format(doc_index))
             doc_sents[doc_index] = ""
+            num_no_assign += 1
+    if num_no_assign > 0:
+        print(
+            "[!] {}/{} document indexes  have no assigned summary! -- setting empty string"
+            .format(num_no_assign, len(goldens['golden'])))
 
-    # read classification results
-
-    # if it's a directory, average the results?
-    # parse golden summaries
     doc_keys = list(doc_sents.keys())
     doc_sents = [doc_sents[k] for k in doc_keys]
     doc_goldens = [doc_goldens[k] for k in doc_keys]
-    print("Evaluating {} input and {} golden summaries".format(
-        len(doc_sents), len(doc_goldens)))
-    # print(doc_sents)
-    # print(doc_goldens)
+
     maxlength, maxtype = 100, "words"
     scores = get_rouge_scores(doc_sents, doc_goldens, maxlength, maxtype)
     with open("results.pickle", "wb") as f:
         pickle.dump(scores, f)
 
     if do_print:
-        print_results(scores, ["Avg"])
-        print_results(scores, ["Best"])
+        print_results(scores, rouge_mode, ngram_mode, metric)
+        # print_results(scores, ["Best"])
 
     return scores
 
@@ -211,33 +191,37 @@ def main(results_file, dataset_file, golden_summaries_file, do_print=True):
 if __name__ == "__main__":
     """
     Arguments:
-    results_file: path to <num samples x DIM > ndarray of float predictions, in one-hot format (DIM=2), or a prediction vector (DIM=1)
-                  containing label indexes or probability scores. In the latter case, a decision threshold of 0.5 is adopted.
-                  If it's a list, the first element is retrieved (for compatibility reasons with other tools). 
-    dataset_file: path to the json dataset serialization. The structure below should be present:
+    predictions: 
+    dataset_path: path to the json dataset serialization. The structure below should be present:
                   {"data": {"test":[{"text":"bla..", "document_index": 0}, .... ]}}
-    golden_summaries_file: path to the golden summaries json dataset serialization. The structure below should be present:
+    golden_summaries_path: path to the golden summaries json dataset serialization. The structure below should be present:
                   {"golden": [{"summary": ["summary sent1", ...], "document_index": 0}, ...]}
     """
     parser = argparse.ArgumentParser(description='')
     # classification results file, to pick which sentences where classified as summary parts
     parser.add_argument(
-        'results_file',
+        'predictions',
         help=
-        "File containing predictions for an extractive summarization binary classification task."
+        "Numpy ndarray with prob. scores or prediction indexes"
     )
     # the dataset path corresponding to the results
     parser.add_argument(
-        'dataset_file',
+        'dataset_path',
         help="Path to the dataset json file of the test data.",
     )
     # the golden summaries path
-    parser.add_argument('golden_summaries_file',
+    parser.add_argument('golden_summaries_path',
                         help="Path to the golden summaries fo the test data.")
-    parser.add_argument('--print',
+    parser.add_argument('--do_print',
                         action="store_true",
                         help="Print results or not (default true)",
                         dest="do_print",
                         default=True)
+    parser.add_argument('rouge_mode',
+                        help="Avg Best or Individual", default="Avg")
+    parser.add_argument('ngram_mode',
+                        help="rouge-1, ..., rouge-4, rouge-l, rouge-w", default=["rouge-1", "rouge-2"])
+    parser.add_argument('metric',
+                        help="precision, recall or f1", default=["f1"])
     args = parser.parse_args()
-    main(args.results_file, args.dataset_file, args.golden_summaries_file, args.do_print)
+    main(**vars(args))
