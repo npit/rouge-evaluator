@@ -55,8 +55,8 @@ def run_single_folder(**kwargs):
     folder_path = kwargs["input_path"]
     fusion = kwargs["fusion"]
     prediction_pickles = glob(folder_path + "/results/*.predictions.pickle")
-    print("Got {} prediction files from folder: {}".format(
-        len(prediction_pickles), folder_path))
+    print("Evaluating folder: {} -- got {} prediction files".format(folder_path,
+        len(prediction_pickles)))
 
     if not prediction_pickles:
         print("No predition pickle files found.")
@@ -71,7 +71,8 @@ def run_single_folder(**kwargs):
     if fusion == "early":
         predictions = [np.mean(predictions, axis=0)]
 
-    for prediction in predictions:
+    for p, prediction in enumerate(predictions):
+        print("Evaluating prediction {}/{}".format(p+1, len(predictions)))
         kwargs['do_print'] = False
         scores = evaluate_prediction_array(prediction, kwargs)
         scores = scores[rouge_mode]
@@ -93,11 +94,11 @@ def run_large_folder(**kwargs):
     all_scores = {}
     large_results_dir = kwargs["input_path"]
 
-    for run_id in os.listdir(large_results_dir):
-        if not isdir(join(large_results_dir, run_id)):
-            continue
+    dirs = [d for d in os.listdir(large_results_dir) if isdir(join(large_results_dir, run_id))]
+    for r, run_id in enumerate(dirs):
         run_dir = join(large_results_dir, run_id)
         kwargs["input_path"] = run_dir
+        print("Evaluating fodler {}/{}: {}".format(r, len(dirs), run_dir))
         run_scores = run_single_folder(**kwargs)
         all_scores[run_id] = run_scores
 

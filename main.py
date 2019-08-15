@@ -169,7 +169,7 @@ def main(**kwargs):
             num_no_assign += 1
     if num_no_assign > 0:
         print(
-            "[!] {}/{} document indexes  have no assigned summary! -- setting empty string"
+            "[!] A total of {} out of {} document indexes  have no assigned summary! -- setting empty string"
             .format(num_no_assign, len(goldens['golden'])))
 
     doc_keys = list(doc_sents.keys())
