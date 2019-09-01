@@ -2,6 +2,7 @@ import argparse
 import glob
 import json
 import pickle
+import sys
 from os.path import isdir, join
 
 import numpy as np
@@ -112,26 +113,14 @@ def print_results(scores, rouge_mode, ngram_mode, metric):
     print(df.round(3).to_string())
 
 
-def main(**kwargs):
-    predictions = kwargs["predictions"]
-    dataset_path = kwargs["dataset_path"]
-    golden_summaries_path = kwargs["golden_summaries_path"]
-    do_print = kwargs["do_print"]
-    rouge_mode = kwargs["rouge_mode"]
-    ngram_mode = kwargs["ngram_mode"]
-    metric = kwargs["metric"]
-
-
-    ngram_mode = [ngram_mode] if type(ngram_mode) is not list else ngram_mode
-    metric = [metric] if type(metric) is not list else metric
-
+def get_selected_sentences(dataset_path, predictions):
+    """Retrieves selected input dataset sentences given extractive prediction scores."""
     if len(predictions.shape) > 1:
         # get selected sentence indexes, if preditions are probabilities or scores
         predictions = np.argmax(predictions, axis=1)
-    # if set(predictions) != set([0, 1]):
-    #     # convert probability scores to label indexes
-    #     predictions = np.round(predictions)
+
     selected_sents = np.where(predictions == 1)[0]
+
     # get sentences themselves
     with open(dataset_path) as f:
         dataset = json.load(f)
@@ -144,6 +133,38 @@ def main(**kwargs):
         if doc_index not in doc_sents:
             doc_sents[doc_index] = []
         doc_sents[doc_index].append(sent)
+    return doc_sents
+
+
+def parse_input_json(input_path):
+    """Get an input spassummaries json. TODO abstract."""
+    with open(input_path) as f:
+        data = json.load(f)
+    res = {}
+    for datum in data["golden"]:
+        res[len(res)] = datum["summaries"]
+    return res
+
+def main(**kwargs):
+    input_arg = kwargs["input"]
+    dataset_path = kwargs["dataset_path"]
+    golden_summaries_path = kwargs["golden_summaries_path"]
+    do_print = kwargs["do_print"]
+    rouge_mode = kwargs["rouge_mode"]
+    ngram_mode = kwargs["ngram_mode"]
+    metric = kwargs["metric"]
+
+    ngram_mode = [ngram_mode] if type(ngram_mode) is not list else ngram_mode
+    metric = [metric] if type(metric) is not list else metric
+
+    if type(input_arg) is np.ndarray:
+        doc_sents = get_selected_sentences(dataset_path, input_arg)
+    elif type(input_arg) is str and input_arg.endswith(".json"):
+        doc_sents = parse_input_json(input_arg)
+    else:
+        print("Undefined input of type: {}: {}".format(type(input_arg), input_arg))
+        exit(1)
+
 
     # merge selected sentences
     for doc_idx in doc_sents:
@@ -199,29 +220,22 @@ if __name__ == "__main__":
     """
     parser = argparse.ArgumentParser(description='')
     # classification results file, to pick which sentences where classified as summary parts
-    parser.add_argument(
-        'predictions',
-        help=
-        "Numpy ndarray with prob. scores or prediction indexes"
-    )
+    parser.add_argument('input',
+                        help="Numpy ndarray with proba scores or prediction indexes" + \
+                         " or json file of the form" + \
+                         """{"goldens":[{"summaries:"["summary one", "summary two"], "document_index":0}, ...]}""")
+
     # the dataset path corresponding to the results
-    parser.add_argument(
-        'dataset_path',
-        help="Path to the dataset json file of the test data.",
-    )
+    parser.add_argument('dataset_path', help="Path to the dataset json file of the test data.")
     # the golden summaries path
-    parser.add_argument('golden_summaries_path',
-                        help="Path to the golden summaries fo the test data.")
+    parser.add_argument('golden_summaries_path', help="Path to the golden summaries fo the test data.")
     parser.add_argument('--do_print',
                         action="store_true",
                         help="Print results or not (default true)",
                         dest="do_print",
                         default=True)
-    parser.add_argument('rouge_mode',
-                        help="Avg Best or Individual", default="Avg")
-    parser.add_argument('ngram_mode',
-                        help="rouge-1, ..., rouge-4, rouge-l, rouge-w", default=["rouge-1", "rouge-2"])
-    parser.add_argument('metric',
-                        help="precision, recall or f1", default=["f1"])
+    parser.add_argument('-rouge_mode', help="Avg Best or Individual", default="Avg")
+    parser.add_argument('-ngram_mode', help="rouge-1, ..., rouge-4, rouge-l, rouge-w", default=["rouge-1", "rouge-2"])
+    parser.add_argument('-metric', help="precision, recall or f1", default=["f1"])
     args = parser.parse_args()
     main(**vars(args))
