@@ -130,10 +130,11 @@ def get_selected_sentences(dataset_path, predictions):
     for dat in selected_sents:
         sent = dat['text']
         doc_index = dat['document_index']
+        print(doc_index)
         if doc_index not in doc_sents:
             doc_sents[doc_index] = []
         doc_sents[doc_index].append(sent)
-    return doc_sents
+    return doc_sents, predictions, selected_sents
 
 
 def parse_input_json(input_path):
@@ -158,7 +159,7 @@ def main(**kwargs):
     metric = [metric] if type(metric) is not list else metric
 
     if type(input_arg) is np.ndarray:
-        doc_sents = get_selected_sentences(dataset_path, input_arg)
+        doc_sents, predictions, sels = get_selected_sentences(dataset_path, input_arg)
     elif type(input_arg) is str and input_arg.endswith(".json"):
         doc_sents = parse_input_json(input_arg)
     else:
@@ -166,39 +167,42 @@ def main(**kwargs):
         exit(1)
 
 
+    doc_text = {}
     # merge selected sentences
     for doc_idx in doc_sents:
         sents = [s.strip() for s in doc_sents[doc_idx]]
         sents = [s if s.endswith(".") else s + "." for s in sents]
-        doc_sents[doc_idx] = " ".join(sents)
+        doc_text[doc_idx] = " ".join(sents)
 
     with open(golden_summaries_path) as f:
         goldens = json.load(f)
 
     doc_goldens = {}
+    doc_text_goldens = {}
     num_no_assign = 0
     for gold in goldens['golden']:
         summs = gold['summaries']
         doc_index = gold['document_index']
-        if doc_index in doc_goldens:
+        if doc_index in doc_text_goldens:
             print("Encountered already existing doc index in goldens: ",
                   doc_index)
             exit(1)
-        doc_goldens[doc_index] = " ".join(summs)
-        if doc_index not in doc_sents:
-            doc_sents[doc_index] = ""
+        doc_goldens[doc_index] = summs
+        doc_text_goldens[doc_index] = " ".join(summs)
+        if doc_index not in doc_text:
+            doc_text[doc_index] = ""
             num_no_assign += 1
     if num_no_assign > 0:
         print(
             "[!] A total of {} out of {} document indexes  have no assigned summary! -- setting empty string"
             .format(num_no_assign, len(goldens['golden'])))
 
-    doc_keys = list(doc_sents.keys())
-    doc_sents = [doc_sents[k] for k in doc_keys]
-    doc_goldens = [doc_goldens[k] for k in doc_keys]
+    doc_keys = list(doc_text.keys())
+    doc_text = [doc_text[k] for k in doc_keys]
+    doc_text_goldens = [doc_text_goldens[k] for k in doc_keys]
 
     maxlength, maxtype = 100, "words"
-    scores = get_rouge_scores(doc_sents, doc_goldens, maxlength, maxtype)
+    scores = get_rouge_scores(doc_text, doc_text_goldens, maxlength, maxtype)
     with open("results.pickle", "wb") as f:
         pickle.dump(scores, f)
 
