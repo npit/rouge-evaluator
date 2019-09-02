@@ -43,7 +43,7 @@ def evaluate_prediction_array(predictions, kwargs):
         print("Prediction type unhandled:  ", type(predictions))
         exit(1)
 
-    kwargs["predictions"] = predictions
+    kwargs["input"] = predictions
     if "input_path" in kwargs:
         del kwargs["input_path"]
     return main(**kwargs)

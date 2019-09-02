@@ -130,7 +130,6 @@ def get_selected_sentences(dataset_path, predictions):
     for dat in selected_sents:
         sent = dat['text']
         doc_index = dat['document_index']
-        print(doc_index)
         if doc_index not in doc_sents:
             doc_sents[doc_index] = []
         doc_sents[doc_index].append(sent)
